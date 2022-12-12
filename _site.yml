@@ -6,13 +6,10 @@ navbar:
   left:
     - text: "The project"
       icon: fa-home
-      href: index.html
+      href: Project.html
     - text: "PDF"
       icon: fa-user 
-      href: about.html
-    - text: "The report"
-      icon: fa-file-pdf-o
-      href: cv.html
+      href: Project.html
   right:
     - text: "Contact me"
       icon: fa-envelope-o
