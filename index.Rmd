@@ -1,5 +1,6 @@
 ---
 title: "BST 260 Final Project"
+output: html
 ---
 
 ```{r setup, include=FALSE}
