@@ -1,1 +1,130 @@
+---
+title: "BST 260 Final Project"
+---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+```
+
+## Introduction  
+
+Ischemic heart disease (IHD) has been identified as a leading cause of death globally (Ref). Compelling evidence showed that lifestyle changes could be effective strategies for secondary preventions of IHD (Ref). Therefore, to reduce the burden of IHD mortality, an efficient tool for IHD screening and early diagnosis is warranted. A machine learning algorithm that is developed with serum metabolites, cardiometabolic biomarkers, and self-reported phenotypic data is promising in simplifying the process and reduce the cost of IHD screening/diagnosis. IHD status could be accurately detected with a simple blood draw and metabolomic profiling. In this project, I aim to develop such an algorithm using data from a European population.  
+
+I will use data from the MetaCardis consortium that recruited participants aged 18-75 years from Denmark, France, and Germany (Ref). The data was published early this year as the supplementary material of an article on Nature Medicine (Ref). The original study included 372 individuals with IHD. These IHD cases were further classified into acute coronary syndrome (n = 112), chronic ischemic heart disease, (n = 158), and heart failure (n = 102). With a case-control design, the study also included 3 groups of controls matched on varies factors. The raw data includes 1,882 observations including repeated records with the same participant ID but different case-control status.  
+
+For this project, I will use records from the 372 IHD cases and 372 controls matched on type 2 diabetes (T2D) status and body mass index (BMI). I will also extract data for age, gender, fasting plasma triglycerides, adiponectin, and CRP, systolic and diastolic blood pressure, left ventricular ejection fraction, physical activity level, and 1,513 log-transformed values of serum metabolites.  
+
+### Exploratory data analysis  
+
+After reading in the data, I first filtered the observations to keep the IHD cases and their controls matched by T2D status and BMI. I then merged metabolites data with cardiometabolic biomarkers and self-reported phenotypic data to create a `main` dataset with 744 rows and 1522 columns. I noticed that several participants do not have any metabolites data, and therefore, need to be removed. Additionally, around 30% of participants had missing values for left ventricular ejection fraction and physical activity level. Many machine learning techniques could not be implemented with that many missing and it would also not be appropriate to replace the missings with any arbitrarily selected value. So I removed these two potential predictors from my analyses. Finally, for variables with less than 10% missing data, I replaced the missing values with the median of the non-missing data. The cleaned `main` dataset had 603 rows and 1522 columns.  
+
+I then preprocessed the data to remove non-informative predictors with near-zero variances. Given that I planned to train as least one of my algorithms with regression, it would be better to have more predictors normally distributed so that model efficiencies could be improved. I tested the normality of each predictor with Shapiro-wilks Test and summarized the p-values. I found that only 101 predictors are normally distributed. It is also note-worthy that the metabolite values from the raw data were all log-transformed. Obviously, log-tranformation did not normalize the distributions successfully. So I transformed all metabolite values back to the original scale and used rank-based inverse normal transformation (INT) to normalized the distributions instead. As examples, histograms showing the distributions of oleoylcarnitine (C18:1) and S-methylcysteine sulfoxide before and after the transformation were shown. I ended up having 840 predictors normalized successfully.  
+
+### Methodologies to use  
+
+The outcome that my algorithm aimed to predict is the binary IHD status (non-case = 0, case = 1). Considering that I had 1422 predictors, I would use principle component analysis (PCA) to reduce dimensions. I would keep principle components that account for at least 70% of variability as new predictors, and train a model with logistic regression, and a model with K-nearest neighbor (KNN). Given that the principle components are hard to interpret and algorithms developed based on PCA could be difficult to implement, I would train another KNN model with all 1422 predictors instead. Random forest would be the 4th training method I would use. Finally, I will use ensemble to combine the results of all four algorithms. For all algorithms, I would evaluate the overall accuracy, sensitivity, specificity, and ROC curve. I would also use cross-validation and bootstrapping to tune the model parameters.  
+
+## Results  
+
+## Conclusion  
+
+## Reference  
+
+## Appendix  
+```{r, echo=FALSE, warning=FALSE, error=FALSE, message=FALSE}
+library(tidyverse)
+library(readxl)
+library(caret)
+library(RNOmni)
+library(pROC)
+library(randomForest) 
+
+#Read in
+meta <- read_excel("/Users/xgu/Documents/Harvard/Fall 2022/BST260/bst260project/41591_2022_1688_MOESM3_ESM.xlsx", 
+                          sheet = 13, skip = 1, na = "NA", col_types = "guess")
+demo <- read_excel("/Users/xgu/Documents/Harvard/Fall 2022/BST260/bst260project/41591_2022_1688_MOESM3_ESM.xlsx", 
+                   sheet = 10, skip = 1, na = "NA", col_types = c("text", "text", rep("numeric", 22), "text", "text", "text"))
+
+#Selection and filtering
+demo_new <- demo %>%
+  filter(Status %in% c("IHD372", "MMC372")) %>%
+  mutate(case = case_when(Status == "MMC372" ~ 0, TRUE ~ 1),
+         Gender = case_when(Gender == "Male" ~ 1, TRUE ~ 0)) %>%
+  rename(age = "Age (years)", tag = "Fasting plasma triglycerides (mmol/L)", 
+         adiponectin = "Fasting plasma adiponectin (mg/L)", crp = "Fasting plasma CRP (mg/L)",
+         sbp = "Systolic blood pressure (mmHg)", dbp = "Diastolic blood pressure (mmHg)", 
+         lvef = "Left ventricular ejection fraction (%)", act = "Physical activity (h/week)") %>%
+  select(ID, case, age, tag, adiponectin, crp, sbp, dbp, Gender, lvef, act)
+  
+meta_new <- meta %>%
+  filter(Status %in% c("IHD372", "MMC372")) %>%
+  select(-c(Status))
+
+#Merge
+main <- demo_new %>%
+  left_join(meta_new, by = "ID")
+head(main)
+```  
+
+```{r, echo=FALSE, warning=FALSE, error=FALSE, message=FALSE}
+#Check missing
+pctmiss <- function(x){
+  pctmiss <- sum(is.na(x))/length(x)
+  return(pctmiss)
+}
+miss <- as.data.frame(sapply(main, pctmiss))
+head(miss)
+
+main <- main %>% 
+  select(-c("lvef", "act")) %>% 
+  filter(acetate != "NA", spermidine != "NA") %>%
+  mutate(tag = case_when(is.na(tag) ~ median(tag, na.rm = TRUE), TRUE ~ tag),
+         adiponectin = case_when(is.na(adiponectin) ~ median(adiponectin, na.rm = TRUE), TRUE ~ adiponectin),
+         crp = case_when(is.na(crp) ~ median(crp, na.rm = TRUE), TRUE ~ crp),
+         sbp = case_when(is.na(sbp) ~ median(sbp, na.rm = TRUE), TRUE ~ sbp),
+         dbp = case_when(is.na(dbp) ~ median(dbp, na.rm = TRUE), TRUE ~ dbp))
+head(main)
+```  
+
+```{r, echo=FALSE, warning=FALSE, error=FALSE, message=FALSE, out.width="50%"}
+var <- main %>% select(-c("ID", "case"))
+
+#Preprocessing
+nzv <- nearZeroVar(var)
+col_index <- setdiff(1:ncol(var), nzv)
+length(col_index)
+
+var_proc <- var[,col_index]
+
+#check normality
+normality <- data.frame()
+for (i in 1:length(colnames(var_proc))){
+  normality[i, 1] <- colnames(var_proc)[i]
+  normality[i, 2] <- shapiro.test(pull(var_proc[,i]))$p.value
+  colnames(normality) <- c("metabolites", "shapiro.p")
+}
+table(ifelse(normality$shapiro.p >0.05, 1, 0))
+#which(normality$shapiro.p > 0.05)
+
+#Log transformation not work
+m <- as.matrix(var_proc[,8:1422])
+exp_m <- exp(m)
+var_proc_exp <- cbind(var_proc[,1:7], as.data.frame(exp_m))
+
+var_proc_int <- as.data.frame(sapply(var_proc_exp, RankNorm))
+
+#check normality again!
+normality_int <- data.frame()
+for (i in 1:length(colnames(tibble(var_proc_int)))){
+  normality_int[i, 1] <- colnames(tibble(var_proc_int))[i]
+  normality_int[i, 2] <- shapiro.test(pull(tibble(var_proc_int)[,i]))$p.value
+  colnames(normality_int) <- c("metabolites", "shapiro.p")
+}
+table(ifelse(normality_int$shapiro.p >0.05, 1, 0))
+#which(normality_int$shapiro.p > 0.05)
+
+hist(var_proc_exp$`oleoylcarnitine (C18:1)`, main = "Histogram of oleoylcarnitine (C18:1)", xlab = "Oleoylcarnitine (C18:1)")
+hist(var_proc_int$`oleoylcarnitine (C18:1)`, main = "Histogram of INT-transformed oleoylcarnitine (C18:1)", xlab = "INT(Oleoylcarnitine (C18:1))")
+hist(var_proc_exp$`S-methylcysteine sulfoxide`, main = "Histogram of S-methylcysteine sulfoxide", xlab = "S-methylcysteine sulfoxide")
+hist(var_proc_int$`S-methylcysteine sulfoxide`, main = "Histogram of INT-transformed S-methylcysteine sulfoxide", xlab = "INT(S-methylcysteine sulfoxide)")   
+```  
